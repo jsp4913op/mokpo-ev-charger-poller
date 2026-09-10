@@ -71,17 +71,37 @@ def fetch_status_items(service_key: str) -> list[dict]:
     return items
 
 
-def append_status_log(rows: list[dict]) -> None:
+def load_existing_keys() -> set[tuple[str, str, str]]:
+    """이미 기록된 (statId, chgerId, statUpdDt) 조합을 읽어온다. 같은 상태 변경 이벤트를
+    period 조회 구간이 겹쳐서 여러 번 다시 받아오더라도 중복 기록하지 않기 위함."""
+    if not STATUS_LOG_PATH.exists():
+        return set()
+
+    keys = set()
+    with open(STATUS_LOG_PATH, encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            keys.add((row.get("statId", ""), row.get("chgerId", ""), row.get("statUpdDt", "")))
+    return keys
+
+
+def append_status_log(rows: list[dict]) -> int:
     STATUS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     file_exists = STATUS_LOG_PATH.exists()
+    existing_keys = load_existing_keys()
 
     fetched_at = datetime.now(timezone.utc).isoformat()
+    written = 0
 
     with open(STATUS_LOG_PATH, "a", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         if not file_exists:
             writer.writeheader()
         for row in rows:
+            key = (row.get("statId", ""), row.get("chgerId", ""), row.get("statUpdDt", ""))
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
             writer.writerow({
                 "fetched_at": fetched_at,
                 "statId": row.get("statId", ""),
@@ -93,6 +113,9 @@ def append_status_log(rows: list[dict]) -> None:
                 "nowTsdt": row.get("nowTsdt", ""),
                 "busiId": row.get("busiId", ""),
             })
+            written += 1
+
+    return written
 
 
 def main() -> None:
@@ -105,8 +128,9 @@ def main() -> None:
     print(f"목포(zscode={MOKPO_ZSCODE}) 상태 변경 {len(items)}건 수신")
 
     if items:
-        append_status_log(items)
-        print(f"{STATUS_LOG_PATH}에 {len(items)}건 기록 완료")
+        written = append_status_log(items)
+        skipped = len(items) - written
+        print(f"{STATUS_LOG_PATH}에 {written}건 신규 기록 (중복 {skipped}건 건너뜀)")
     else:
         print("이번 주기에는 목포 지역 상태 변경 없음 (정상 상황일 수 있음)")
 
