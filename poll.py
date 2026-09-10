@@ -10,6 +10,7 @@
 import csv
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,6 +21,21 @@ MOKPO_ZSCODE = "12110"
 PERIOD_MINUTES = 10  # 공식 최대값. 스케줄러 지연을 감안해 폴링 주기(5분)보다 여유있게 잡음
 NUM_OF_ROWS = 9999
 MAX_PAGES = 5  # 목포로 이미 좁혀졌으니 사실상 1페이지면 충분하지만 안전장치로 둠
+MAX_RETRIES = 3  # 일시적 네트워크 타임아웃 등으로 폴링 한 번을 통째로 날리지 않기 위한 재시도 횟수
+RETRY_BACKOFF_SECONDS = 5
+
+
+def request_with_retry(url: str, params: dict) -> requests.Response:
+    last_error: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            return requests.get(url, params=params, timeout=30)
+        except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError) as e:
+            last_error = e
+            print(f"[경고] 연결 실패 (시도 {attempt}/{MAX_RETRIES}): {e}", file=sys.stderr)
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_BACKOFF_SECONDS)
+    raise last_error
 
 BASE_DIR = Path(__file__).resolve().parent
 STATUS_LOG_PATH = BASE_DIR / "data" / "status_log.csv"
@@ -43,7 +59,7 @@ def fetch_status_items(service_key: str) -> list[dict]:
             "zscode": MOKPO_ZSCODE,
             "dataType": "JSON",
         }
-        resp = requests.get(API_URL, params=params, timeout=30)
+        resp = request_with_retry(API_URL, params)
         if not resp.ok:
             print(f"[오류 응답 본문]\n{resp.text}", file=sys.stderr)
         resp.raise_for_status()
