@@ -13,13 +13,28 @@
 
 ## 준비물
 
-- **`DATA_GO_KR_SERVICE_KEY`**: data.go.kr에서 발급받은 인증키(Decoding 키)를 저장소 Settings → Secrets and variables → Actions에 등록
-- **`data/mokpo_chargers.csv`**: 목포 지역 충전소의 (statId, chgerId) 목록. 현재는 빈 템플릿 상태이며, "전라남도 목포시_전기차 충전소현황" 공공데이터를 기반으로 채워야 한다.
+- **`DATA_GO_KR_SERVICE_KEY`**: data.go.kr에서 발급받은 인증키를 저장소 Settings → Secrets and variables → Actions에 등록
+- **`data/mokpo_chargers.csv`**: 목포 지역 충전소의 (statId, chgerId) 목록. `fetch_mokpo_chargers.py`로 자동 생성한다 (아래 참고).
 
-## 로컬 테스트
+## 목포 충전소 참조 목록 생성 (최초 1회, 또는 갱신 시)
+
+`data/reference_mokpo_stations_20250902.csv`는 "전라남도 목포시_전기차 충전소현황" 공공데이터(정적 파일)로,
+충전소명·주소는 있지만 API가 요구하는 `statId`가 없어 그대로는 못 쓴다. 대신 `getChargerInfo` API를
+호출해 주소에 "목포"가 포함된 충전소를 걸러 `data/mokpo_chargers.csv`를 만든다:
 
 ```bash
 pip install -r requirements.txt
-export DATA_GO_KR_SERVICE_KEY="발급받은_디코딩_키"
+export DATA_GO_KR_SERVICE_KEY="발급받은_인증키"
+python fetch_mokpo_chargers.py
+```
+
+생성된 건수가 `reference_mokpo_stations_20250902.csv`의 1,804건과 크게 다르면(누락/과다)
+필터링 로직이나 데이터 시점 차이를 점검한다.
+
+## 로컬 테스트 (폴링)
+
+```bash
+pip install -r requirements.txt
+export DATA_GO_KR_SERVICE_KEY="발급받은_인증키"
 python poll.py
 ```
