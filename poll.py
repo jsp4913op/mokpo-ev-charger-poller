@@ -56,6 +56,8 @@ def fetch_status_items(service_key: str) -> list[dict]:
             "period": PERIOD_MINUTES,
         }
         resp = requests.get(API_URL, params=params, timeout=30)
+        if not resp.ok:
+            print(f"[오류 응답 본문]\n{resp.text}", file=sys.stderr)
         resp.raise_for_status()
 
         root = ET.fromstring(resp.text)
