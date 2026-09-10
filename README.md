@@ -9,7 +9,9 @@
 서버 단에서 바로 필터링된다 (전남·광주 통합 시도코드는 `zcode=12`). 그래서 클라이언트에서
 ID를 매칭할 필요 없이, API 호출 자체를 목포로 좁혀서 받는다.
 
-1. GitHub Actions가 5분마다 `poll.py`를 실행한다.
+1. **cron-job.org**가 5분마다 GitHub Actions의 `workflow_dispatch` API를 호출해 `poll.py`를 실행시킨다.
+   GitHub Actions 자체의 `schedule` 트리거는 무료 계정에서 5분처럼 촘촘한 주기를 안정적으로
+   지켜주지 않아(실측상 몇 시간씩 벌어짐), 대신 정시 실행을 보장하는 외부 스케줄러를 앞단에 둔 구조다.
 2. `poll.py`는 환경공단 EvCharger Open API(`getChargerStatus`)를 `zscode=12110`, `period=10`(최근 10분 내
    상태 변경건), `dataType=JSON`으로 호출한다.
    - 전국 전체를 매번 조회하면 API 일일 호출 한도(1,000회)를 초과하므로, 지역+변경건 필터로 호출량을 줄인다.
@@ -23,6 +25,21 @@ ID를 매칭할 필요 없이, API 호출 자체를 목포로 좁혀서 받는�
 
 `stat` 코드 의미: `0`=알수없음, `1`=통신이상, `2`=사용가능, `3`=충전중, `4`=운영중지, `5`=점검중
 (공식 가이드 기준. `nowTsdt`는 현재 충전 세션이 시작된 일시라 혼잡도 모델에 바로 활용 가능)
+
+## 외부 스케줄러(cron-job.org) 설정
+
+1. GitHub Fine-grained personal access token 발급 (해당 저장소만, Actions: Read and write 권한만)
+2. [cron-job.org](https://cron-job.org)에 아래 내용으로 cronjob 등록
+   - URL: `https://api.github.com/repos/<owner>/<repo>/actions/workflows/poll.yml/dispatches`
+   - Method: `POST`
+   - 실행 주기: 5분마다
+   - Headers: `Accept: application/vnd.github+json`, `Authorization: Bearer <PAT>`,
+     `X-GitHub-Api-Version: 2022-11-28`, `Content-Type: application/json`
+   - Body: `{"ref":"main"}`
+
+성공 시 GitHub이 `204 No Content`로 응답한다. Actions 실행 기록에는 PAT 소유자 이름으로
+"Manually run by ..."라고 뜨는데, 이는 실제로 사람이 누른 게 아니라 토큰 인증 방식상 그렇게
+표시되는 것뿐이다.
 
 ## 준비물
 

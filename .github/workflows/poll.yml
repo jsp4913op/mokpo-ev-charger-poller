@@ -1,8 +1,6 @@
 name: Poll Mokpo EV charger status
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -34,4 +32,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/status_log.csv
           git diff --cached --quiet || git commit -m "chore: update charger status log"
+          git pull --rebase
           git push
