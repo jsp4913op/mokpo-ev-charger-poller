@@ -85,7 +85,7 @@ def write_csv(rows: list[dict]) -> None:
 
 
 def main() -> None:
-    service_key = os.environ.get("DATA_GO_KR_SERVICE_KEY")
+    service_key = (os.environ.get("DATA_GO_KR_SERVICE_KEY") or "").strip()
     if not service_key:
         print("[오류] 환경변수 DATA_GO_KR_SERVICE_KEY가 설정되어 있지 않습니다.", file=sys.stderr)
         sys.exit(1)
