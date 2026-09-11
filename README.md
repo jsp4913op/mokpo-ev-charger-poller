@@ -68,7 +68,7 @@ python poll.py
 ```
 
 
-data\status_log.csv 5분마다 사용기록 들어오는 것
+data\status_log.csv 5분마다 사용기록 들어오는 것\n
 충전소명 (statNm)
 주소 (addr)
 위도·경도 (lat, lng)
@@ -76,7 +76,7 @@ data\status_log.csv 5분마다 사용기록 들어오는 것
 운영기관명 (busiNm)
 충전기 타입 (chgerType)
 
-data\mokpo_chargers.csv 목포에 있는 충전소
+data\mokpo_chargers.csv 목포에 있는 충전소\n
 fetched_at   저희가 이 데이터를 가져온 시각 (폴링한 시점, 우리 스크립트가 붙인 값)
 statId   충전소 ID (예: ME184089 — 충전소 하나를 식별하는 고유번호)
 chgerId   충전기 ID (한 충전소 안에 충전기가 여러 대 있을 수 있어서, 그중 몇 번인지)
