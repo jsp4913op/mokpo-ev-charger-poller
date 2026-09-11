@@ -66,3 +66,28 @@ pip install -r requirements.txt
 export DATA_GO_KR_SERVICE_KEY="발급받은_인증키"
 python poll.py
 ```
+
+
+
+
+data\status.log 5분마다 사용기록 들어오는 것
+충전소명 (statNm)
+주소 (addr)
+위도·경도 (lat, lng)
+이용가능시간 (useTime)
+운영기관명 (busiNm)
+충전기 타입 (chgerType)
+
+data\
+fetched_at   저희가 이 데이터를 가져온 시각 (폴링한 시점, 우리 스크립트가 붙인 값)
+statId   충전소 ID (예: ME184089 — 충전소 하나를 식별하는 고유번호)
+chgerId   충전기 ID (한 충전소 안에 충전기가 여러 대 있을 수 있어서, 그중 몇 번인지)
+stat   충전기 상태 코드: 0=알수없음, 1=통신이상, 2=사용가능, 3=충전중, 4=운영중지, 5=점검중
+statUpdDt   이 상태로 바뀐 시각 (마지막으로 상태가 갱신된 일시)
+lastTsdt   가장 최근 충전이 시작된 시각
+lastTedt   가장 최근 충전이 종료된 시각
+nowTsdt   지금 충전 중이라면, 그 충전이 시작된 시각 (충전중 아니면 보통 비어있음)
+busiId   운영기관 코드 (예: ME = 환경부)
+
+
+
