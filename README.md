@@ -68,8 +68,8 @@ python poll.py
 ```
 
 
-data\status_log.csv 5분마다 사용기록 들어오는 것
-충전소명 (statNm)
+data\status_log.csv 5분마다 사용기록 들어오는 것  
+충전소명 (statNm)  
 주소 (addr)
 위도·경도 (lat, lng)
 이용가능시간 (useTime)
