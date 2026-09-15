@@ -1,6 +1,7 @@
 # mokpo-ev-charger-poller
 
-목포 지역 전기차 충전기 상태를 5분 주기로 수집해 `data/status_log.csv`에 누적 기록하는 프로젝트입니다.
+목포·서울 지역 전기차 충전기 상태를 주기적으로 수집해 각각 `data/status_log.csv`(목포, 5분 주기),
+`data/seoul_status_log.csv`(서울, 10분 주기)에 누적 기록하는 프로젝트입니다.
 2026 빛가람 AI·ICT 경진대회 출품작의 "충전소 혼잡도 예측" 기능 학습용 데이터를 모으기 위한 파이프라인입니다.
 
 ## 동작 방식
@@ -96,9 +97,29 @@ python fetch_seoul_chargers.py
 ```
 
 `getChargerInfo`를 `zcode=11`(서울, 시도 단위 전체)로 호출해 `data/seoul_chargers.csv`를 만든다.
-서울은 서울시가 이미 공개한 2023~2025년 시간대별 충전 이력 데이터가 있어서(별도 소스), 이
-스크립트는 그 데이터를 지도에 표시하거나 위치 매칭할 때 쓸 충전소 마스터 정보(위·경도 등)만
-보강하는 용도다. 목포처럼 직접 폴링해서 상태 이력을 쌓는 대상이 아니므로 `poll.py`와는 무관하다.
+위치 정보 보강용이며, `output`(충전기 출력 kW) 필드도 포함한다 — 총비용 계산 시 요금 구간을
+정하는 데 필요하다 (mokpo_chargers.csv도 동일).
 
+## 서울 실시간 상태 폴링 — poll_seoul.py
+
+서울시가 공개한 2023~2025년 이력 데이터는 혼잡도 예측 모델의 **학습용**으로 쓰고, `poll_seoul.py`로
+지금부터 쌓는 2026년 실측 데이터는 그 모델이 실제로 잘 맞는지 **검증(테스트)용**으로 쓴다.
+
+`poll.py`(목포)와 구조는 동일하되 다음이 다르다:
+- `zscode` 대신 `zcode=11`(서울 시도 단위 전체) 사용
+- 폴링 주기 **10분** (5분이 아님 — 목포와 합쳐서 하루 호출 한도 1,000회를 넘지 않도록, 그리고
+  `period` 최댓값(10분)과 정확히 맞춰서 구멍 없이 이어지도록 한 값). 실측 결과 한 번에 1페이지
+  (약 1,300여 건)로 충분했다.
+- 결과는 `data/status_log.csv`가 아니라 **`data/seoul_status_log.csv`**에 별도로 쌓인다
+
+```bash
+pip install -r requirements.txt
+export DATA_GO_KR_SERVICE_KEY="발급받은_인증키"
+python poll_seoul.py
+```
+
+cron-job.org에는 목포용과 별개로 **두 번째 cronjob**을 등록해야 한다 — URL의
+`poll.yml`을 `poll_seoul.yml`로, 실행 주기를 10분으로 바꾸는 것 외엔 동일하다 (아래
+"외부 스케줄러" 절차 참고).
 
 
