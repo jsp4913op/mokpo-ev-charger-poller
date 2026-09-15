@@ -68,24 +68,37 @@ python poll.py
 ```
 
 
-data\status_log.csv 5분마다 사용기록 들어오는 것  
-충전소명 (statNm)  
-주소 (addr)  
-위도·경도 (lat, lng)  
-이용가능시간 (useTime)  
-운영기관명 (busiNm)  
-충전기 타입 (chgerType)  
+### data/status_log.csv — 5분마다 상태 기록이 쌓이는 파일
+- `fetched_at` 저희가 이 데이터를 가져온 시각 (폴링한 시점, 우리 스크립트가 붙인 값)
+- `statId` 충전소 ID (예: ME184089 — 충전소 하나를 식별하는 고유번호)
+- `chgerId` 충전기 ID (한 충전소 안에 충전기가 여러 대 있을 수 있어서, 그중 몇 번인지)
+- `stat` 충전기 상태 코드: 0=알수없음, 1=통신이상, 2=사용가능, 3=충전중, 4=운영중지, 5=점검중
+- `statUpdDt` 이 상태로 바뀐 시각 (마지막으로 상태가 갱신된 일시)
+- `lastTsdt` 가장 최근 충전이 시작된 시각
+- `lastTedt` 가장 최근 충전이 종료된 시각
+- `nowTsdt` 지금 충전 중이라면, 그 충전이 시작된 시각 (충전중 아니면 보통 비어있음)
+- `busiId` 운영기관 코드 (예: ME = 환경부)
 
-data\mokpo_chargers.csv 목포에 있는 충전소  
-fetched_at   저희가 이 데이터를 가져온 시각 (폴링한 시점, 우리 스크립트가 붙인 값)  
-statId   충전소 ID (예: ME184089 — 충전소 하나를 식별하는 고유번호)  
-chgerId   충전기 ID (한 충전소 안에 충전기가 여러 대 있을 수 있어서, 그중 몇 번인지)  
-stat   충전기 상태 코드: 0=알수없음, 1=통신이상, 2=사용가능, 3=충전중, 4=운영중지, 5=점검중  
-statUpdDt   이 상태로 바뀐 시각 (마지막으로 상태가 갱신된 일시)  
-lastTsdt   가장 최근 충전이 시작된 시각  
-lastTedt   가장 최근 충전이 종료된 시각  
-nowTsdt   지금 충전 중이라면, 그 충전이 시작된 시각 (충전중 아니면 보통 비어있음)  
-busiId   운영기관 코드 (예: ME = 환경부)  
+### data/mokpo_chargers.csv, data/seoul_chargers.csv — 충전소 마스터 목록(위치 포함)
+- `statNm` 충전소명
+- `addr` 주소
+- `lat`, `lng` 위도·경도
+- `useTime` 이용가능시간
+- `busiNm` 운영기관명
+- `chgerType` 충전기 타입
+
+## 서울 충전소 마스터 목록 생성 (최초 1회, 또는 갱신 시)
+
+```bash
+pip install -r requirements.txt
+export DATA_GO_KR_SERVICE_KEY="발급받은_인증키"
+python fetch_seoul_chargers.py
+```
+
+`getChargerInfo`를 `zcode=11`(서울, 시도 단위 전체)로 호출해 `data/seoul_chargers.csv`를 만든다.
+서울은 서울시가 이미 공개한 2023~2025년 시간대별 충전 이력 데이터가 있어서(별도 소스), 이
+스크립트는 그 데이터를 지도에 표시하거나 위치 매칭할 때 쓸 충전소 마스터 정보(위·경도 등)만
+보강하는 용도다. 목포처럼 직접 폴링해서 상태 이력을 쌓는 대상이 아니므로 `poll.py`와는 무관하다.
 
 
 
