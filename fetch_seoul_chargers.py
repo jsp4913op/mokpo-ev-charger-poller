@@ -42,7 +42,7 @@ OUTPUT_PATH = BASE_DIR / "data" / "seoul_chargers.csv"
 
 FIELDNAMES = [
     "statId", "chgerId", "statNm", "addr", "addrDetail",
-    "lat", "lng", "useTime", "busiNm", "chgerType", "stat",
+    "lat", "lng", "useTime", "busiNm", "chgerType", "output", "stat",
 ]
 
 
