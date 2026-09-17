@@ -32,4 +32,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/mokpo_chargers.csv
           git diff --cached --quiet || git commit -m "chore: update mokpo charger master list"
+          git pull --rebase
           git push
