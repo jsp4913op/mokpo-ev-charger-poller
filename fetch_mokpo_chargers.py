@@ -9,6 +9,7 @@ data/mokpo_chargers.csv에 목포 지역 충전소 마스터 목록(위치 포�
 import csv
 import os
 import sys
+import time
 from pathlib import Path
 
 import requests
@@ -17,6 +18,8 @@ API_URL = "https://apis.data.go.kr/B552584/EvCharger/getChargerInfo"
 MOKPO_ZSCODE = "12110"
 NUM_OF_ROWS = 9999
 MAX_PAGES = 10  # 목포로 좁혀졌으니 1페이지면 충분하지만 안전장치로 둠
+MAX_RETRIES = 3  # 일시적 네트워크 타임아웃 등으로 조회 한 번을 통째로 날리지 않기 위한 재시도 횟수
+RETRY_BACKOFF_SECONDS = 5
 
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_PATH = BASE_DIR / "data" / "mokpo_chargers.csv"
@@ -25,6 +28,19 @@ FIELDNAMES = [
     "statId", "chgerId", "statNm", "addr", "addrDetail",
     "lat", "lng", "useTime", "busiNm", "chgerType", "output", "stat",
 ]
+
+
+def request_with_retry(url: str, params: dict) -> requests.Response:
+    last_error: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            return requests.get(url, params=params, timeout=60)
+        except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError) as e:
+            last_error = e
+            print(f"[경고] 연결 실패 (시도 {attempt}/{MAX_RETRIES}): {e}", file=sys.stderr)
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_BACKOFF_SECONDS)
+    raise last_error
 
 
 def fetch_all_items(service_key: str) -> list[dict]:
@@ -39,7 +55,7 @@ def fetch_all_items(service_key: str) -> list[dict]:
             "zscode": MOKPO_ZSCODE,
             "dataType": "JSON",
         }
-        resp = requests.get(API_URL, params=params, timeout=60)
+        resp = request_with_retry(API_URL, params)
         if not resp.ok:
             print(f"[오류 응답 본문]\n{resp.text}", file=sys.stderr)
         resp.raise_for_status()
