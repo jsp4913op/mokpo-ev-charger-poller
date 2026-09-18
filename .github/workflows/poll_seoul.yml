@@ -3,6 +3,12 @@ name: Poll Seoul EV charger status
 on:
   workflow_dispatch: {}
 
+# cron-job.org 자동 호출과 수동 트리거가 겹치면 같은 CSV 파일에 동시에 commit/push하려다
+# git 충돌이 날 수 있어(poll.yml에서 실제 발생 확인, 2026-09-18), 겹치는 실행은 순서대로 대기시킨다.
+concurrency:
+  group: poll-seoul
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
