@@ -4,9 +4,10 @@
 누적 기록하는 프로젝트입니다 (목포 5분 주기, 서울 10분 주기).
 2026 빛가람 AI·ICT 경진대회 출품작의 "충전소 혼잡도 예측" 기능 학습용 데이터를 모으기 위한 파이프라인입니다.
 
-> **2026-09-18부터 저장 방식이 CSV+git 커밋에서 Supabase 직접 저장으로 바뀌었습니다.**
-> 그 이전까지 쌓인 데이터는 `data/*.csv`에 그대로 보존되어 있고(과거 이력 백업용, 더 이상 갱신 안 됨),
-> `migrate_master_data.py`로 그 시점의 마스터 목록을 Supabase로 옮겨왔습니다.
+> **2026-09-18부터 Supabase가 주 저장소가 됐습니다.** 상태 로그는 이제 Supabase
+> `charger_status_logs`에 저장되며, **DB 용량 초과·장애 등에 대비해 `data/*.csv`에도 계속
+> 이중으로 백업**된다 (Supabase 저장이 실패해도 CSV 백업은 항상 먼저 끝나 있어 데이터 유실이 없음).
+> 마스터 목록(`stations`/`chargers`)도 `migrate_master_data.py`로 Supabase에 동기화했다.
 
 ## 동작 방식
 
@@ -106,11 +107,12 @@ GitHub Actions에서는 `fetch-chargers.yml`/`fetch-seoul-chargers.yml`이 fetch
 - 폴링 주기 **10분** (목포와 합쳐서 하루 호출 한도 1,000회를 넘지 않도록, `period` 최댓값과 맞춤)
 - 서울은 충전기 수가 훨씬 많아(약 75,616건) `REGION_CODE="SEOUL"`로 별도 관리
 
-## 과거 CSV 데이터 (`data/*.csv`)
+## CSV 백업 (`data/status_log.csv`, `data/seoul_status_log.csv`)
 
-Supabase 전환 이전(~2026-09-18)에 쌓인 이력이며 더 이상 자동 갱신되지 않는다. 필요하면
-`dedupe_status_log.py`로 여전히 중복 정리는 가능하지만(`data/status_log.csv`만 대상), 새 데이터는
-전부 Supabase `charger_status_logs`에 쌓이므로 앞으로의 분석은 거기서 조회하면 된다.
+Supabase가 주 저장소지만, DB 용량 초과나 접속 장애에 대비해 **매 폴링마다 CSV에도 계속 그대로
+이중 기록**한다 (`poll.py`/`poll_seoul.py`가 CSV를 먼저 쓰고 그 다음 Supabase에 쓰므로, Supabase 쪽이
+실패해도 원본 데이터는 CSV에 안전하게 남는다). 중복 방지 로직도 CSV/Supabase 양쪽에 각자 따로
+있다. 필요하면 `dedupe_status_log.py`로 `data/status_log.csv`의 중복을 정리할 수 있다.
 
 ## 참고 문서
 
