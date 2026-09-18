@@ -40,7 +40,25 @@ ID를 매칭할 필요 없이, API 호출 자체를 목포로 좁혀서 받는�
 | 4 | 운영중지 | `OUT_OF_SERVICE` |
 | 5 | 점검중 | `MAINTENANCE` |
 
-(`nowTsdt`는 현재 충전 세션이 시작된 일시라 혼잡도 모델에 바로 활용 가능 — `charger_status_logs.now_tsdt`에 저장됨)
+## 컬럼/필드 설명
+
+### `charger_status_logs` (Supabase, 주 저장소)
+- `charger_id` 충전기 uuid (`chargers.id` 참조)
+- `status` 위 표로 변환한 상태 (`charger_status` enum)
+- `source_status_code` API가 준 원본 `stat` 값 그대로 (정보 손실 방지용 참고 컬럼)
+- `observed_at` 이 상태로 갱신된 시각 (API `statUpdDt`)
+- `last_tsdt` 가장 최근 충전이 시작된 시각
+- `last_tedt` 가장 최근 충전이 종료된 시각
+- `now_tsdt` 지금 충전 중이라면, 그 충전이 시작된 시각 (충전중 아니면 보통 비어있음 —
+  혼잡도 모델에 바로 활용 가능)
+
+### CSV 백업 (`data/status_log.csv`, `data/seoul_status_log.csv`)
+API 원본 필드명을 그대로 쓴다 (DB 컬럼명과 대응: `statUpdDt`→`observed_at`,
+`lastTsdt`→`last_tsdt`, `lastTedt`→`last_tedt`, `nowTsdt`→`now_tsdt`).
+- `fetched_at` 폴링(요청)한 시각 — 우리 스크립트가 붙인 값
+- `statId` 충전소 ID
+- `chgerId` 충전기 ID (한 충전소 안에 여러 대 있을 수 있어 그중 몇 번인지)
+- `busiId` 운영기관 코드 (예: ME = 환경부, EV = 에버온 등 사업자별 코드)
 
 ## 준비물
 
