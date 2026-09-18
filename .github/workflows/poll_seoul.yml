@@ -3,9 +3,6 @@ name: Poll Seoul EV charger status
 on:
   workflow_dispatch: {}
 
-permissions:
-  contents: write
-
 jobs:
   poll:
     runs-on: ubuntu-latest
@@ -24,13 +21,5 @@ jobs:
       - name: Run poller
         env:
           DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: python poll_seoul.py
-
-      - name: Commit and push updated log
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/seoul_status_log.csv
-          git diff --cached --quiet || git commit -m "chore: update seoul charger status log"
-          git pull --rebase
-          git push

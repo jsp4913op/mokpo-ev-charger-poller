@@ -26,6 +26,11 @@ jobs:
           DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
         run: python fetch_mokpo_chargers.py
 
+      - name: Sync master list to Supabase
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: python migrate_master_data.py
+
       - name: Commit and push updated charger list
         run: |
           git config user.name "github-actions[bot]"
