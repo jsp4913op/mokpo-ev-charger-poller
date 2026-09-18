@@ -40,10 +40,16 @@ jobs:
           git add data/status_log.csv
           git diff --cached --quiet && exit 0
           git commit -m "chore: update charger status log (backup)"
-          # poll_seoul.yml과 동시에 push할 때 경합할 수 있어 실패 시 재시도(최대 5회)
+          # 겹치는 실행이 있으면 push가 경합할 수 있어 실패 시 재시도(최대 5회).
+          # rebase가 실제로 충돌하면 그 상태로 남아 다음 재시도도 연쇄로 실패하므로,
+          # 매 시도 전에 이전 시도의 중단된 rebase를 확실히 정리(abort)하고 다시 시도한다.
           for i in 1 2 3 4 5; do
-            git pull --rebase && git push && exit 0
+            git rebase --abort 2>/dev/null || true
+            if git pull --rebase && git push; then
+              exit 0
+            fi
             echo "push 실패, 재시도 ($i/5)"
             sleep 5
           done
+          git rebase --abort 2>/dev/null || true
           exit 1
