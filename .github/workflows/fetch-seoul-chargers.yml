@@ -2,6 +2,10 @@ name: Fetch Seoul charger master list
 
 on:
   workflow_dispatch: {}
+  schedule:
+    # 매주 일요일 UTC 18:15 = 한국시간 월요일 03:15. fetch-chargers.yml(목포)과 15분 띄워서
+    # 두 워크플로가 동시에 data.go.kr을 두드리지 않게 함.
+    - cron: "15 18 * * 0"
 
 # poll.yml/poll_seoul.yml과 같은 이유로(동시 실행 시 git push 경합) 겹치는 실행은 순서대로 대기시킨다.
 concurrency:

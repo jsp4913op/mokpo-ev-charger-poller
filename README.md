@@ -92,7 +92,9 @@ cp .env.example .env   # DATA_GO_KR_SERVICE_KEY, SUPABASE_DB_URL 채우기
    매칭 실패가 많으면 1번(마스터 목록 동기화)을 다시 돌린다.
 
 GitHub Actions에서는 `fetch-chargers.yml`/`fetch-seoul-chargers.yml`이 fetch 다음에
-`migrate_master_data.py`를 자동으로 실행해 Supabase까지 동기화한다.
+`migrate_master_data.py`를 자동으로 실행해 Supabase까지 동기화한다. 마스터 목록(충전소
+위치 등)은 거의 안 바뀌는 정적 정보라, 매주 일요일 새벽(한국시간 월요일 03:00/03:15,
+목포/서울 15분 간격) `schedule`로도 자동 실행된다 (수동 `workflow_dispatch`도 그대로 가능).
 
 ## `stations.region_code` 값
 

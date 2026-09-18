@@ -2,6 +2,10 @@ name: Fetch Mokpo charger master list
 
 on:
   workflow_dispatch: {}
+  schedule:
+    # 매주 일요일 UTC 18:00 = 한국시간 월요일 03:00. 마스터 목록(충전소 위치 등)은
+    # 거의 안 바뀌는 정적 정보라 주 1회면 충분하고, data.go.kr 트래픽이 적을 새벽 시간대로 잡았다.
+    - cron: "0 18 * * 0"
 
 # poll.yml/poll_seoul.yml과 같은 이유로(동시 실행 시 git push 경합) 겹치는 실행은 순서대로 대기시킨다.
 concurrency:

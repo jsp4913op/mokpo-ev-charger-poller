@@ -22,15 +22,17 @@ API_URL = "https://apis.data.go.kr/B552584/EvCharger/getChargerInfo"
 SEOUL_ZCODE = "11"
 NUM_OF_ROWS = 9999
 MAX_PAGES = 10  # 서울 전체 규모를 감안해 목포보다 여유있게 잡음 (필요시 늘릴 것)
-MAX_RETRIES = 4
+MAX_RETRIES = 6
 RETRY_BACKOFF_SECONDS = 5
+CONNECT_TIMEOUT_SECONDS = 10  # 정상 연결은 보통 1초 내 응답. 60초는 죽은 서버 판별에 과함 -
+                              # 줄인 만큼 같은 시간 예산 안에서 재시도를 더 많이 돌린다.
 
 
 def request_with_retry(url: str, params: dict) -> requests.Response:
     last_error: Exception | None = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            return requests.get(url, params=params, timeout=60)
+            return requests.get(url, params=params, timeout=CONNECT_TIMEOUT_SECONDS)
         except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError) as e:
             last_error = e
             print(f"[경고] 연결 실패 (시도 {attempt}/{MAX_RETRIES}): {e}", file=sys.stderr)
