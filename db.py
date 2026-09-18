@@ -7,7 +7,7 @@ GitHub Actions Secrets에만 넣을 것.
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import psycopg2
 import psycopg2.extras
@@ -39,12 +39,21 @@ def map_status(raw_code) -> str:
     return STATUS_MAP.get(str(raw_code), "UNKNOWN")
 
 
+KST = timezone(timedelta(hours=9))
+
+
 def parse_api_datetime(value: str | None) -> datetime | None:
-    """API가 주는 'YYYYMMDDHHMMSS' 형식 문자열을 datetime으로 변환한다. 빈 값이면 None."""
+    """API가 주는 'YYYYMMDDHHMMSS' 형식 문자열을 datetime으로 변환한다. 빈 값이면 None.
+
+    환경공단 API는 한국 시간(KST)으로 값을 주는데, tzinfo 없이 그냥 datetime을 만들면
+    psycopg2/Postgres가 이걸 UTC로 오해하고 저장해서 실제보다 9시간 밀린 시각이 저장된다
+    (2026-09-18 발견된 버그). 그래서 반드시 KST를 명시해서 만든다 — 그러면 Postgres가
+    올바른 절대 시각(UTC 기준 -9시간)으로 변환해서 저장한다.
+    """
     if not value:
         return None
     try:
-        return datetime.strptime(value, "%Y%m%d%H%M%S")
+        return datetime.strptime(value, "%Y%m%d%H%M%S").replace(tzinfo=KST)
     except ValueError:
         return None
 
