@@ -41,15 +41,17 @@ REGION_CODE = "SEOUL"  # migrate_master_data.py가 stations.region_code에 넣�
 PERIOD_MINUTES = 10  # 공식 최대값. 폴링 주기(10분)와 맞춰서 구멍 없이 이어지게 함
 NUM_OF_ROWS = 9999
 MAX_PAGES = 20  # 서울은 충전기 수가 많아 목포보다 여유있게 잡음
-MAX_RETRIES = 3
+MAX_RETRIES = 5
 RETRY_BACKOFF_SECONDS = 5
+CONNECT_TIMEOUT_SECONDS = 10  # 정상 연결은 보통 1초 내 응답. 30초는 죽은 서버 판별에 과함 -
+                              # 줄인 만큼 같은 시간 예산 안에서 재시도를 더 많이 돌린다.
 
 
 def request_with_retry(url: str, params: dict) -> requests.Response:
     last_error: Exception | None = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            return requests.get(url, params=params, timeout=30)
+            return requests.get(url, params=params, timeout=CONNECT_TIMEOUT_SECONDS)
         except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError) as e:
             last_error = e
             print(f"[경고] 연결 실패 (시도 {attempt}/{MAX_RETRIES}): {e}", file=sys.stderr)

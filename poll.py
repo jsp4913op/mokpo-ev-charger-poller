@@ -38,15 +38,17 @@ REGION_CODE = "MOKPO"  # migrate_master_data.py가 stations.region_code에 넣�
 PERIOD_MINUTES = 10  # 공식 최대값. 스케줄러 지연을 감안해 폴링 주기(5분)보다 여유있게 잡음
 NUM_OF_ROWS = 9999
 MAX_PAGES = 5  # 목포로 이미 좁혀졌으니 사실상 1페이지면 충분하지만 안전장치로 둠
-MAX_RETRIES = 3  # 일시적 네트워크 타임아웃 등으로 폴링 한 번을 통째로 날리지 않기 위한 재시도 횟수
+MAX_RETRIES = 5  # 일시적 네트워크 타임아웃 등으로 폴링 한 번을 통째로 날리지 않기 위한 재시도 횟수
 RETRY_BACKOFF_SECONDS = 5
+CONNECT_TIMEOUT_SECONDS = 10  # 정상 연결은 보통 1초 내 응답. 30초는 죽은 서버 판별에 과함 -
+                              # 줄인 만큼 같은 시간 예산 안에서 재시도를 더 많이 돌린다.
 
 
 def request_with_retry(url: str, params: dict) -> requests.Response:
     last_error: Exception | None = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            return requests.get(url, params=params, timeout=30)
+            return requests.get(url, params=params, timeout=CONNECT_TIMEOUT_SECONDS)
         except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError) as e:
             last_error = e
             print(f"[경고] 연결 실패 (시도 {attempt}/{MAX_RETRIES}): {e}", file=sys.stderr)
