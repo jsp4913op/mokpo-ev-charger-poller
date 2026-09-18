@@ -14,6 +14,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from urllib.parse import unquote
 
 import requests
 
@@ -42,7 +43,7 @@ OUTPUT_PATH = BASE_DIR / "data" / "seoul_chargers.csv"
 
 FIELDNAMES = [
     "statId", "chgerId", "statNm", "addr", "addrDetail",
-    "lat", "lng", "useTime", "busiNm", "chgerType", "output", "stat",
+    "lat", "lng", "useTime", "busiId", "busiNm", "chgerType", "output", "stat",
 ]
 
 
@@ -108,7 +109,8 @@ def write_csv(rows: list[dict]) -> None:
 
 
 def main() -> None:
-    service_key = (os.environ.get("DATA_GO_KR_SERVICE_KEY") or "").strip()
+    # data.go.kr 인증키가 이미 URL-encoding된 형태일 수 있어 미리 decode (이중 인코딩 방지)
+    service_key = unquote((os.environ.get("DATA_GO_KR_SERVICE_KEY") or "").strip())
     if not service_key:
         print("[오류] 환경변수 DATA_GO_KR_SERVICE_KEY가 설정되어 있지 않습니다.", file=sys.stderr)
         sys.exit(1)
