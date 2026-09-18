@@ -11,17 +11,29 @@ poll.py(목포, 5분 주기)와 거의 동일한 구조이며 다른 점만 정�
   실서비스 지역이 아니라서 5분보다 느슨한 10분 주기로도 충분하다.
 - 어느 charger_id에 연결할지는 stations/chargers 테이블에서 찾는다 — migrate_master_data.py로
   마스터 목록이 먼저 채워져 있어야 한다.
+- DB 용량 초과 등 장애 상황을 대비한 백업으로 data/seoul_status_log.csv에도 계속 그대로 남긴다(이중 저장).
 """
 
+import csv
 import os
 import sys
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import unquote
 
 import psycopg2.extras
 import requests
 
 from db import get_connection, load_charger_id_map, map_status, parse_api_datetime
+
+BASE_DIR = Path(__file__).resolve().parent
+STATUS_LOG_PATH = BASE_DIR / "data" / "seoul_status_log.csv"
+
+CSV_FIELDNAMES = [
+    "fetched_at", "statId", "chgerId", "stat", "statUpdDt",
+    "lastTsdt", "lastTedt", "nowTsdt", "busiId",
+]
 
 API_URL = "https://apis.data.go.kr/B552584/EvCharger/getChargerStatus"
 SEOUL_ZCODE = "11"
@@ -89,6 +101,52 @@ def fetch_status_items(service_key: str) -> list[dict]:
                   f"{len(items)}건만 받음. 일일 호출 한도를 감안해 MAX_PAGES 조정 필요.", file=sys.stderr)
 
     return items
+
+
+def load_existing_csv_keys() -> set[tuple[str, str, str]]:
+    """CSV 백업용 중복 방지 — 이미 기록된 (statId, chgerId, statUpdDt) 조합을 읽어온다."""
+    if not STATUS_LOG_PATH.exists():
+        return set()
+    keys = set()
+    with open(STATUS_LOG_PATH, encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            keys.add((row.get("statId", ""), row.get("chgerId", ""), row.get("statUpdDt", "")))
+    return keys
+
+
+def append_status_log_csv(items: list[dict]) -> int:
+    """DB 장애/용량 초과 대비 백업. charger 매칭 여부와 무관하게 원본 그대로 남긴다."""
+    STATUS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    file_exists = STATUS_LOG_PATH.exists()
+    existing_keys = load_existing_csv_keys()
+
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    written = 0
+
+    with open(STATUS_LOG_PATH, "a", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES)
+        if not file_exists:
+            writer.writeheader()
+        for item in items:
+            key = (item.get("statId", ""), item.get("chgerId", ""), item.get("statUpdDt", ""))
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
+            writer.writerow({
+                "fetched_at": fetched_at,
+                "statId": item.get("statId", ""),
+                "chgerId": item.get("chgerId", ""),
+                "stat": item.get("stat", ""),
+                "statUpdDt": item.get("statUpdDt", ""),
+                "lastTsdt": item.get("lastTsdt", ""),
+                "lastTedt": item.get("lastTedt", ""),
+                "nowTsdt": item.get("nowTsdt", ""),
+                "busiId": item.get("busiId", ""),
+            })
+            written += 1
+
+    return written
 
 
 def save_status_items(conn, items: list[dict]) -> tuple[int, int, int]:
@@ -177,16 +235,23 @@ def main() -> None:
         print("이번 주기에는 서울 지역 상태 변경 없음 (정상 상황일 수 있음)")
         return
 
-    conn = get_connection()
-    try:
-        inserted, duplicate, unmatched = save_status_items(conn, items)
-    finally:
-        conn.close()
+    # CSV 백업을 먼저 남긴다 — DB 용량 초과/장애로 아래 Supabase 저장이 실패해도
+    # 원본 데이터는 여기 그대로 남도록.
+    csv_written = append_status_log_csv(items)
+    print(f"{STATUS_LOG_PATH}에 {csv_written}건 백업 기록 (중복 {len(items) - csv_written}건 제외)")
 
-    print(
-        f"Supabase charger_status_logs에 {inserted}건 신규 기록 "
-        f"(중복 {duplicate}건, charger 매칭 실패 {unmatched}건 건너뜀)"
-    )
+    try:
+        conn = get_connection()
+        try:
+            inserted, duplicate, unmatched = save_status_items(conn, items)
+        finally:
+            conn.close()
+        print(
+            f"Supabase charger_status_logs에 {inserted}건 신규 기록 "
+            f"(중복 {duplicate}건, charger 매칭 실패 {unmatched}건 건너뜀)"
+        )
+    except Exception as e:
+        print(f"[경고] Supabase 저장 실패 (CSV 백업은 완료됨): {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

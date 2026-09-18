@@ -3,6 +3,9 @@ name: Poll Seoul EV charger status
 on:
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   poll:
     runs-on: ubuntu-latest
@@ -23,3 +26,18 @@ jobs:
           DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: python poll_seoul.py
+
+      - name: Commit and push CSV backup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/seoul_status_log.csv
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: update seoul charger status log (backup)"
+          # poll.yml과 동시에 push할 때 경합할 수 있어 실패 시 재시도(최대 5회)
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && exit 0
+            echo "push 실패, 재시도 ($i/5)"
+            sleep 5
+          done
+          exit 1
