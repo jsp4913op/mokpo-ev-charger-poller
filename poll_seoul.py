@@ -11,14 +11,17 @@ poll.py(목포, 5분 주기)와 거의 동일한 구조이며 다른 점만 정�
   실서비스 지역이 아니라서 5분보다 느슨한 10분 주기로도 충분하다.
 - 어느 charger_id에 연결할지는 stations/chargers 테이블에서 찾는다 — migrate_master_data.py로
   마스터 목록이 먼저 채워져 있어야 한다.
-- DB 용량 초과 등 장애 상황을 대비한 백업으로 data/seoul_status_log.csv에도 계속 그대로 남긴다(이중 저장).
+- DB 용량 초과 등 장애 상황을 대비한 백업으로 CSV에도 계속 그대로 남긴다(이중 저장).
+  서울은 하루 약 10MB씩 쌓여 파일 하나로 두면 GitHub 파일 한도(100MiB)에 걸리므로(2026-09-24 실제 발생),
+  UTC 날짜별 파일(data/seoul_status_log_YYYY-MM-DD.csv)로 나눠 기록한다.
+  분할 이전에 쌓인 data/seoul_status_log.csv는 그대로 두고 더 이상 추가하지 않는다.
 """
 
 import csv
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -28,7 +31,10 @@ import requests
 from db import get_connection, load_charger_id_map, map_status, parse_api_datetime
 
 BASE_DIR = Path(__file__).resolve().parent
-STATUS_LOG_PATH = BASE_DIR / "data" / "seoul_status_log.csv"
+
+
+def csv_path_for(day: date) -> Path:
+    return BASE_DIR / "data" / f"seoul_status_log_{day.isoformat()}.csv"
 
 CSV_FIELDNAMES = [
     "fetched_at", "statId", "chgerId", "stat", "statUpdDt",
@@ -105,28 +111,33 @@ def fetch_status_items(service_key: str) -> list[dict]:
     return items
 
 
-def load_existing_csv_keys() -> set[tuple[str, str, str]]:
+def load_existing_csv_keys(paths: list[Path]) -> set[tuple[str, str, str]]:
     """CSV 백업용 중복 방지 — 이미 기록된 (statId, chgerId, statUpdDt) 조합을 읽어온다."""
-    if not STATUS_LOG_PATH.exists():
-        return set()
     keys = set()
-    with open(STATUS_LOG_PATH, encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            keys.add((row.get("statId", ""), row.get("chgerId", ""), row.get("statUpdDt", "")))
+    for path in paths:
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                keys.add((row.get("statId", ""), row.get("chgerId", ""), row.get("statUpdDt", "")))
     return keys
 
 
-def append_status_log_csv(items: list[dict]) -> int:
-    """DB 장애/용량 초과 대비 백업. charger 매칭 여부와 무관하게 원본 그대로 남긴다."""
-    STATUS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    file_exists = STATUS_LOG_PATH.exists()
-    existing_keys = load_existing_csv_keys()
+def append_status_log_csv(items: list[dict], now: datetime | None = None) -> tuple[Path, int]:
+    """DB 장애/용량 초과 대비 백업. charger 매칭 여부와 무관하게 원본 그대로 남긴다.
+    UTC 날짜별 파일에 기록하고, 자정 경계에서 period(10분) 조회 구간이 겹쳐 같은 이벤트가
+    두 번 들어오는 걸 막으려고 어제 파일의 키도 함께 읽어 중복을 거른다."""
+    now = now or datetime.now(timezone.utc)
+    path = csv_path_for(now.date())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file_exists = path.exists()
+    existing_keys = load_existing_csv_keys([path, csv_path_for(now.date() - timedelta(days=1))])
 
-    fetched_at = datetime.now(timezone.utc).isoformat()
+    fetched_at = now.isoformat()
     written = 0
 
-    with open(STATUS_LOG_PATH, "a", encoding="utf-8", newline="") as f:
+    with open(path, "a", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES)
         if not file_exists:
             writer.writeheader()
@@ -148,7 +159,7 @@ def append_status_log_csv(items: list[dict]) -> int:
             })
             written += 1
 
-    return written
+    return path, written
 
 
 def save_status_items(conn, items: list[dict]) -> tuple[int, int, int]:
@@ -239,8 +250,8 @@ def main() -> None:
 
     # CSV 백업을 먼저 남긴다 — DB 용량 초과/장애로 아래 Supabase 저장이 실패해도
     # 원본 데이터는 여기 그대로 남도록.
-    csv_written = append_status_log_csv(items)
-    print(f"{STATUS_LOG_PATH}에 {csv_written}건 백업 기록 (중복 {len(items) - csv_written}건 제외)")
+    csv_path, csv_written = append_status_log_csv(items)
+    print(f"{csv_path}에 {csv_written}건 백업 기록 (중복 {len(items) - csv_written}건 제외)")
 
     try:
         conn = get_connection()

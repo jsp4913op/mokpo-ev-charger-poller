@@ -52,7 +52,7 @@ ID를 매칭할 필요 없이, API 호출 자체를 목포로 좁혀서 받는�
 - `now_tsdt` 지금 충전 중이라면, 그 충전이 시작된 시각 (충전중 아니면 보통 비어있음 —
   혼잡도 모델에 바로 활용 가능)
 
-### CSV 백업 (`data/status_log.csv`, `data/seoul_status_log.csv`)
+### CSV 백업 (`data/status_log.csv`, `data/seoul_status_log_YYYY-MM-DD.csv`)
 API 원본 필드명을 그대로 쓴다 (DB 컬럼명과 대응: `statUpdDt`→`observed_at`,
 `lastTsdt`→`last_tsdt`, `lastTedt`→`last_tedt`, `nowTsdt`→`now_tsdt`).
 - `fetched_at` 폴링(요청)한 시각 — 우리 스크립트가 붙인 값
@@ -133,6 +133,17 @@ Supabase가 주 저장소지만, DB 용량 초과나 접속 장애에 대비해 
 이중 기록**한다 (`poll.py`/`poll_seoul.py`가 CSV를 먼저 쓰고 그 다음 Supabase에 쓰므로, Supabase 쪽이
 실패해도 원본 데이터는 CSV에 안전하게 남는다). 중복 방지 로직도 CSV/Supabase 양쪽에 각자 따로
 있다. 필요하면 `dedupe_status_log.py`로 `data/status_log.csv`의 중복을 정리할 수 있다.
+
+### 서울 CSV는 날짜별 파일로 나뉜다
+서울은 하루 약 10MB씩 쌓여서 파일 하나로 두면 GitHub 파일 한도(100MiB)에 걸린다. 실제로
+`data/seoul_status_log.csv`가 2026-09-24에 한도 직전(104,854,860바이트)까지 차서, 이후 CSV 백업
+push가 계속 거부되어 Actions가 실패로 표시됐다(Supabase 저장은 그 앞 단계라 영향 없었음).
+그래서 그 이후부터는 **UTC 날짜별 파일 `data/seoul_status_log_YYYY-MM-DD.csv`**에 기록한다.
+- 분할 이전 기록은 `data/seoul_status_log.csv`(~2026-09-24)에 그대로 남아 있고, 더 이상 추가되지 않는다.
+- 이 CSV를 읽는 코드가 있다면 `data/seoul_status_log*.csv` 패턴으로 여러 파일을 모두 읽어야 한다.
+- 자정(UTC) 경계에서 10분 조회 구간이 겹쳐도 어제 파일 키까지 확인해서 중복을 거른다.
+- 목포(`data/status_log.csv`)는 하루 약 0.9MB라 100MiB까지 여유가 있지만(2026-09 기준 약 3개월),
+  같은 한도가 있으니 그때가 오면 같은 방식으로 나눠야 한다.
 
 ## 참고 문서
 

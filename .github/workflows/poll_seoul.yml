@@ -37,7 +37,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/seoul_status_log.csv
+          # 서울 CSV는 UTC 날짜별 파일이라 파일명이 매일 바뀐다. 이 job은 서울 파일만 수정하므로
+          # data/ 전체를 add해도 안전하고, 새 파일이 아직 없어도(glob 불일치 오류) 죽지 않는다.
+          git add data/
           git diff --cached --quiet && exit 0
           git commit -m "chore: update seoul charger status log (backup)"
           # 겹치는 실행이 있으면 push가 경합할 수 있어 실패 시 재시도(최대 5회).
