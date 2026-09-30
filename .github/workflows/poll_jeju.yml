@@ -1,0 +1,57 @@
+name: Poll Jeju EV charger status
+
+on:
+  workflow_dispatch: {}
+
+# cron-job.org 자동 호출과 수동 트리거가 겹치면 같은 CSV 파일에 동시에 commit/push하려다
+# git 충돌이 날 수 있어(poll.yml에서 실제 발생 확인, 2026-09-18), 겹치는 실행은 순서대로 대기시킨다.
+concurrency:
+  group: poll-jeju
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run poller
+        env:
+          DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: python poll_jeju.py
+
+      - name: Commit and push CSV backup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 제주 CSV는 UTC 날짜별 파일이라 파일명이 매일 바뀐다. 이 job은 제주 파일만 수정하므로
+          # data/ 전체를 add해도 안전하고, 새 파일이 아직 없어도(glob 불일치 오류) 죽지 않는다.
+          git add data/
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: update jeju charger status log (backup)"
+          # 겹치는 실행이 있으면 push가 경합할 수 있어 실패 시 재시도(최대 5회).
+          # rebase가 실제로 충돌하면 그 상태로 남아 다음 재시도도 연쇄로 실패하므로,
+          # 매 시도 전에 이전 시도의 중단된 rebase를 확실히 정리(abort)하고 다시 시도한다.
+          for i in 1 2 3 4 5; do
+            git rebase --abort 2>/dev/null || true
+            if git pull --rebase && git push; then
+              exit 0
+            fi
+            echo "push 실패, 재시도 ($i/5)"
+            sleep 5
+          done
+          git rebase --abort 2>/dev/null || true
+          exit 1
