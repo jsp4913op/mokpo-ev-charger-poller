@@ -31,6 +31,7 @@ BASE_DIR = Path(__file__).resolve().parent
 SOURCES = [
     (BASE_DIR / "data" / "mokpo_chargers.csv", "MOKPO"),
     (BASE_DIR / "data" / "seoul_chargers.csv", "SEOUL"),
+    (BASE_DIR / "data" / "jeju_chargers.csv", "JEJU"),
 ]
 
 

@@ -1,0 +1,274 @@
+"""
+제주 지역(제주시 zscode=50110, 서귀포시 zscode=50130) 전기차 충전기 상태를
+주기적으로 수집해 Supabase(charger_status_logs)에 저장한다.
+
+poll_seoul.py와 거의 동일한 구조이며 다른 점만 정리하면:
+- 제주는 시가 두 개(제주시/서귀포시)라 zscode를 두 번 순회해서 합침
+  (fetch_jeju_chargers.py가 마스터 데이터를 받을 때와 같은 방식)
+- 총 충전기 수가 약 8,764건(제주시 5,780 + 서귀포시 2,984)으로 목포보다 훨씬 많고
+  서울과 비슷한 규모라, period/MAX_PAGES를 서울과 같은 값으로 맞춤
+- 어느 charger_id에 연결할지는 stations/chargers 테이블에서 찾는다 —
+  migrate_master_data.py로 마스터 목록이 먼저 채워져 있어야 한다.
+- DB 용량 초과 등 장애 상황을 대비한 백업으로 CSV에도 계속 그대로 남긴다(이중 저장).
+  서울과 같은 이유로 UTC 날짜별 파일(data/jeju_status_log_YYYY-MM-DD.csv)로 나눠 기록한다.
+
+주의(B 확인 필요): data.go.kr 인증키는 목포/서울/제주 폴러가 전부 같은 키를 공유하고,
+하루 호출 한도(1,000회)도 공유된다. 이 스크립트를 실제로 몇 분 주기로 돌릴지는
+기존 목포(5분)+서울(10분) 호출량을 감안해서 cron-job.org 스케줄을 잡을 때 같이 정해야 한다.
+"""
+
+import csv
+import os
+import sys
+import time
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import unquote
+
+import psycopg2.extras
+import requests
+
+from db import get_connection, load_charger_id_map, map_status, parse_api_datetime
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+def csv_path_for(day: date) -> Path:
+    return BASE_DIR / "data" / f"jeju_status_log_{day.isoformat()}.csv"
+
+CSV_FIELDNAMES = [
+    "fetched_at", "statId", "chgerId", "stat", "statUpdDt",
+    "lastTsdt", "lastTedt", "nowTsdt", "busiId",
+]
+
+API_URL = "https://apis.data.go.kr/B552584/EvCharger/getChargerStatus"
+JEJU_ZSCODES = {"제주시": "50110", "서귀포시": "50130"}
+REGION_CODE = "JEJU"  # migrate_master_data.py가 stations.region_code에 넣는 값과 반드시 같아야 함
+PERIOD_MINUTES = 10  # 공식 최대값. 폴링 주기와 맞춰서 구멍 없이 이어지게 함
+NUM_OF_ROWS = 9999
+MAX_PAGES = 20  # 제주는 충전기 수가 많아(서울급) 목포보다 여유있게 잡음
+MAX_RETRIES = 5
+RETRY_BACKOFF_SECONDS = 5
+CONNECT_TIMEOUT_SECONDS = 10  # 정상 연결은 보통 1초 내 응답. 30초는 죽은 서버 판별에 과함 -
+                              # 줄인 만큼 같은 시간 예산 안에서 재시도를 더 많이 돌린다.
+
+
+def request_with_retry(url: str, params: dict) -> requests.Response:
+    last_error: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            return requests.get(url, params=params, timeout=CONNECT_TIMEOUT_SECONDS)
+        except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError) as e:
+            last_error = e
+            print(f"[경고] 연결 실패 (시도 {attempt}/{MAX_RETRIES}): {e}", file=sys.stderr)
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_BACKOFF_SECONDS)
+    raise last_error
+
+
+def fetch_status_items_for_zscode(service_key: str, zscode: str, label: str) -> list[dict]:
+    items: list[dict] = []
+    page_no = 1
+
+    while page_no <= MAX_PAGES:
+        params = {
+            "serviceKey": service_key,
+            "pageNo": page_no,
+            "numOfRows": NUM_OF_ROWS,
+            "period": PERIOD_MINUTES,
+            "zscode": zscode,
+            "dataType": "JSON",
+        }
+        resp = request_with_retry(API_URL, params)
+        if not resp.ok:
+            print(f"[오류 응답 본문]\n{resp.text}", file=sys.stderr)
+        resp.raise_for_status()
+
+        data = resp.json()
+
+        result_code = data.get("resultCode")
+        result_msg = data.get("resultMsg")
+        if result_code not in (None, "00"):
+            raise RuntimeError(f"API 오류: resultCode={result_code}, resultMsg={result_msg}")
+
+        page_items = (data.get("items") or {}).get("item") or []
+        if isinstance(page_items, dict):
+            page_items = [page_items]
+        if not page_items:
+            break
+
+        items.extend(page_items)
+
+        total_count = data.get("totalCount")
+        if total_count is None or len(items) >= int(total_count):
+            break
+        page_no += 1
+
+        if page_no > MAX_PAGES:
+            print(f"[경고] {label}: MAX_PAGES({MAX_PAGES})에 도달했지만 전체 {total_count}건 중 "
+                  f"{len(items)}건만 받음. 일일 호출 한도를 감안해 MAX_PAGES 조정 필요.", file=sys.stderr)
+
+    return items
+
+
+def load_existing_csv_keys(paths: list[Path]) -> set[tuple[str, str, str]]:
+    """CSV 백업용 중복 방지 — 이미 기록된 (statId, chgerId, statUpdDt) 조합을 읽어온다."""
+    keys = set()
+    for path in paths:
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                keys.add((row.get("statId", ""), row.get("chgerId", ""), row.get("statUpdDt", "")))
+    return keys
+
+
+def append_status_log_csv(items: list[dict], now: datetime | None = None) -> tuple[Path, int]:
+    """DB 장애/용량 초과 대비 백업. charger 매칭 여부와 무관하게 원본 그대로 남긴다.
+    UTC 날짜별 파일에 기록하고, 자정 경계에서 period(10분) 조회 구간이 겹쳐 같은 이벤트가
+    두 번 들어오는 걸 막으려고 어제 파일의 키도 함께 읽어 중복을 거른다."""
+    now = now or datetime.now(timezone.utc)
+    path = csv_path_for(now.date())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file_exists = path.exists()
+    existing_keys = load_existing_csv_keys([path, csv_path_for(now.date() - timedelta(days=1))])
+
+    fetched_at = now.isoformat()
+    written = 0
+
+    with open(path, "a", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES)
+        if not file_exists:
+            writer.writeheader()
+        for item in items:
+            key = (item.get("statId", ""), item.get("chgerId", ""), item.get("statUpdDt", ""))
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
+            writer.writerow({
+                "fetched_at": fetched_at,
+                "statId": item.get("statId", ""),
+                "chgerId": item.get("chgerId", ""),
+                "stat": item.get("stat", ""),
+                "statUpdDt": item.get("statUpdDt", ""),
+                "lastTsdt": item.get("lastTsdt", ""),
+                "lastTedt": item.get("lastTedt", ""),
+                "nowTsdt": item.get("nowTsdt", ""),
+                "busiId": item.get("busiId", ""),
+            })
+            written += 1
+
+    return path, written
+
+
+def save_status_items(conn, items: list[dict]) -> tuple[int, int, int]:
+    """반환: (신규 기록, 중복이라 건너뜀, charger 매칭 안 돼서 건너뜀)"""
+    charger_map = load_charger_id_map(conn, REGION_CODE)
+
+    rows = []
+    unmatched = 0
+    for item in sorted(items, key=lambda i: i.get("statUpdDt") or ""):
+        key = (item.get("statId", ""), item.get("chgerId", ""))
+        charger_id = charger_map.get(key)
+        if charger_id is None:
+            unmatched += 1
+            continue
+        observed_at = parse_api_datetime(item.get("statUpdDt"))
+        if observed_at is None:
+            unmatched += 1
+            continue
+        rows.append((
+            charger_id,
+            map_status(item.get("stat")),
+            item.get("stat", ""),
+            observed_at,
+            parse_api_datetime(item.get("lastTsdt")),
+            parse_api_datetime(item.get("lastTedt")),
+            parse_api_datetime(item.get("nowTsdt")),
+        ))
+
+    if not rows:
+        return 0, 0, unmatched
+
+    with conn.cursor() as cur:
+        # fetch=True면 execute_values가 RETURNING 결과를 함수 반환값으로 직접 준다
+        # (cur.fetchall()로 따로 받는 게 아님. 페이지=1000건 단위로 나눠 실행돼도 전체가 다 모인다).
+        returned = psycopg2.extras.execute_values(
+            cur,
+            """
+            INSERT INTO charger_status_logs
+                (charger_id, status, source_status_code, observed_at, last_tsdt, last_tedt, now_tsdt)
+            VALUES %s
+            ON CONFLICT (charger_id, observed_at) DO NOTHING
+            RETURNING id
+            """,
+            rows,
+            template="(%s, %s::charger_status, %s, %s, %s, %s, %s)",
+            fetch=True,
+            page_size=1000,
+        )
+        inserted = len(returned)
+        duplicate = len(rows) - inserted
+
+        psycopg2.extras.execute_values(
+            cur,
+            """
+            UPDATE chargers AS c SET
+                status = v.status::charger_status,
+                source_status_code = v.source_status_code,
+                status_updated_at = v.observed_at,
+                updated_at = now()
+            FROM (VALUES %s) AS v(charger_id, status, source_status_code, observed_at)
+            WHERE c.id = v.charger_id
+              AND (c.status_updated_at IS NULL OR c.status_updated_at <= v.observed_at)
+            """,
+            [(r[0], r[1], r[2], r[3]) for r in rows],
+            # VALUES절 리터럴은 기본 text로 추론되어 uuid/timestamptz와 비교 시 타입 에러가 나므로 명시 캐스팅
+            template="(%s::uuid, %s, %s, %s::timestamptz)",
+        )
+
+    conn.commit()
+    return inserted, duplicate, unmatched
+
+
+def main() -> None:
+    # data.go.kr이 주는 인증키가 이미 URL-encoding된 형태(%3D%3D 등)일 수 있는데, requests의
+    # params=에 그대로 넣으면 한 번 더 인코딩되어(%253D%253D) 403이 난다. 미리 decode해두면
+    # 인코딩된 키/원본 키 둘 다 안전하게 동작한다.
+    service_key = unquote((os.environ.get("DATA_GO_KR_SERVICE_KEY") or "").strip())
+    if not service_key:
+        print("[오류] 환경변수 DATA_GO_KR_SERVICE_KEY가 설정되어 있지 않습니다.", file=sys.stderr)
+        sys.exit(1)
+
+    all_items: list[dict] = []
+    for label, zscode in JEJU_ZSCODES.items():
+        items = fetch_status_items_for_zscode(service_key, zscode, label)
+        print(f"{label}(zscode={zscode}) 상태 변경 {len(items)}건 수신")
+        all_items.extend(items)
+
+    if not all_items:
+        print("이번 주기에는 제주 지역 상태 변경 없음 (정상 상황일 수 있음)")
+        return
+
+    # CSV 백업을 먼저 남긴다 — DB 용량 초과/장애로 아래 Supabase 저장이 실패해도
+    # 원본 데이터는 여기 그대로 남도록.
+    csv_path, csv_written = append_status_log_csv(all_items)
+    print(f"{csv_path}에 {csv_written}건 백업 기록 (중복 {len(all_items) - csv_written}건 제외)")
+
+    try:
+        conn = get_connection()
+        try:
+            inserted, duplicate, unmatched = save_status_items(conn, all_items)
+        finally:
+            conn.close()
+        print(
+            f"Supabase charger_status_logs에 {inserted}건 신규 기록 "
+            f"(중복 {duplicate}건, charger 매칭 실패 {unmatched}건 건너뜀)"
+        )
+    except Exception as e:
+        print(f"[경고] Supabase 저장 실패 (CSV 백업은 완료됨): {e}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
