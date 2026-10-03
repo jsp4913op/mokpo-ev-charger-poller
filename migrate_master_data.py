@@ -19,13 +19,43 @@ poll.py / poll_seoul.py는 이 마스터 정보가 먼저 채워져 있어야 �
 import csv
 import os
 import sys
+import time
 from pathlib import Path
 
+import psycopg2.errors
 import psycopg2.extras
 
 from db import get_connection
 
 BASE_DIR = Path(__file__).resolve().parent
+
+# 이 작업은 수 분 걸려서(서울 충전기 7만여 건) 같은 시각에 도는 상태 폴러(poll*.py, 10분 주기로
+# chargers를 UPDATE)와 서로 상대가 잡은 행을 기다리다 DB가 한쪽을 중단시키는 교착(deadlock)이
+# 가끔 난다(2026-10-03 서울 충전기 반영 중 실제 발생). 일시적 충돌이라 처음부터 다시 하면 보통 통과한다.
+MAX_DEADLOCK_ATTEMPTS = 5
+DEADLOCK_WAIT_SECONDS = 3  # 시도할 때마다 이 값 x 시도 횟수만큼 기다린다
+
+
+def with_deadlock_retry(conn, fn, label: str):
+    """fn()을 실행하되, DB가 교착으로 중단시키면 롤백하고 잠시 뒤 처음부터 다시 실행한다.
+
+    upsert_stations / upsert_chargers는 끝에서 한 번 commit하는 구조라 중간에 중단돼도 반쯤 반영된
+    상태가 남지 않아 통째로 다시 실행해도 안전하다(upsert라 여러 번 실행해도 결과가 같다).
+    """
+    for attempt in range(1, MAX_DEADLOCK_ATTEMPTS + 1):
+        try:
+            return fn()
+        except psycopg2.errors.DeadlockDetected:
+            conn.rollback()
+            if attempt == MAX_DEADLOCK_ATTEMPTS:
+                raise
+            wait = DEADLOCK_WAIT_SECONDS * attempt
+            print(
+                f"  [재시도] {label}: 교착(deadlock) 감지 — {wait}초 뒤 다시 시도 "
+                f"({attempt}/{MAX_DEADLOCK_ATTEMPTS - 1})",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
 
 # (csv 파일, region_code) — stations.region_code에 들어갈 값. D와 이미 맞춘 값이 있다면 여기만 바꾸면 됨.
 SOURCES = [
@@ -184,11 +214,15 @@ def main() -> None:
             rows = read_rows(csv_path)
             print(f"{csv_path.name}: {len(rows)}행 읽음 (region={region_code})")
 
-            station_id_map = upsert_stations(conn, rows, region_code)
+            station_id_map = with_deadlock_retry(
+                conn, lambda: upsert_stations(conn, rows, region_code), f"{region_code} stations"
+            )
             print(f"  stations upsert: {len(station_id_map)}건")
             total_stations += len(station_id_map)
 
-            n_chargers, skipped = upsert_chargers(conn, rows, station_id_map)
+            n_chargers, skipped = with_deadlock_retry(
+                conn, lambda: upsert_chargers(conn, rows, station_id_map), f"{region_code} chargers"
+            )
             print(f"  chargers upsert: {n_chargers}건 (station 매칭 실패로 스킵 {skipped}건)")
             total_chargers += n_chargers
             total_skipped += skipped
