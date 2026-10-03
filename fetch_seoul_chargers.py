@@ -46,6 +46,8 @@ OUTPUT_PATH = BASE_DIR / "data" / "seoul_chargers.csv"
 FIELDNAMES = [
     "statId", "chgerId", "statNm", "addr", "addrDetail",
     "lat", "lng", "useTime", "busiId", "busiNm", "chgerType", "output", "stat",
+    # 외부인 이용 가능 여부 판단용(이용자 제한 여부/사유, 시설 구분 코드, 안내문)
+    "limitYn", "limitDetail", "kind", "kindDetail", "note",
 ]
 
 

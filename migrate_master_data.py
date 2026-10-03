@@ -47,6 +47,12 @@ def to_float(value: str):
         return None
 
 
+def to_bool_yn(value: str):
+    """API의 'Y'/'N'을 True/False로. 비었거나 그 외 값이면 None(모름)."""
+    v = (value or "").strip().upper()
+    return True if v == "Y" else False if v == "N" else None
+
+
 def upsert_stations(conn, rows: list[dict], region_code: str) -> dict[str, str]:
     """statId 기준으로 stations를 upsert하고 {external_station_id: station_id(uuid)}를 반환한다."""
     # 한 충전소(statId)에 충전기가 여러 대라 여러 행에 statNm/addr 등이 중복되므로 statId 기준으로 1건만 추출
@@ -67,6 +73,11 @@ def upsert_stations(conn, rows: list[dict], region_code: str) -> dict[str, str]:
             to_float(row.get("lng")),
             to_float(row.get("lat")),
             row.get("useTime", "") or None,
+            to_bool_yn(row.get("limitYn")),
+            (row.get("limitDetail") or "").strip() or None,
+            (row.get("kind") or "").strip() or None,
+            (row.get("kindDetail") or "").strip() or None,
+            (row.get("note") or "").strip() or None,
         )
         for stat_id, row in stations_by_id.items()
     ]
@@ -80,7 +91,8 @@ def upsert_stations(conn, rows: list[dict], region_code: str) -> dict[str, str]:
             """
             INSERT INTO stations
                 (external_station_id, name, operator_code, operator_name, address,
-                 region_code, location, operating_hours)
+                 region_code, location, operating_hours,
+                 limit_yn, limit_detail, facility_kind, facility_kind_detail, station_note)
             VALUES %s
             ON CONFLICT (external_station_id) DO UPDATE SET
                 name = EXCLUDED.name,
@@ -90,6 +102,12 @@ def upsert_stations(conn, rows: list[dict], region_code: str) -> dict[str, str]:
                 region_code = EXCLUDED.region_code,
                 location = EXCLUDED.location,
                 operating_hours = EXCLUDED.operating_hours,
+                -- 이용 제한 정보는 이 항목이 없는 구버전 CSV로 실행해도 기존 값을 지우지 않는다.
+                limit_yn = COALESCE(EXCLUDED.limit_yn, stations.limit_yn),
+                limit_detail = COALESCE(EXCLUDED.limit_detail, stations.limit_detail),
+                facility_kind = COALESCE(EXCLUDED.facility_kind, stations.facility_kind),
+                facility_kind_detail = COALESCE(EXCLUDED.facility_kind_detail, stations.facility_kind_detail),
+                station_note = COALESCE(EXCLUDED.station_note, stations.station_note),
                 updated_at = now()
             RETURNING external_station_id, id
             """,
@@ -97,7 +115,8 @@ def upsert_stations(conn, rows: list[dict], region_code: str) -> dict[str, str]:
             template="""(
                 %s, %s, %s, %s, %s, %s,
                 ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
-                %s
+                %s,
+                %s, %s, %s, %s, %s
             )""",
             fetch=True,
             page_size=1000,
