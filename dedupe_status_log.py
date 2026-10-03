@@ -1,5 +1,5 @@
 """
-data/status_log.csv에 이미 쌓인 중복 행을 정리한다.
+data/mokpo/status_log.csv에 이미 쌓인 중복 행을 정리한다.
 
 poll.py가 (statId, chgerId, statUpdDt) 기준 중복 방지 로직을 갖추기 전에 쌓인 데이터,
 또는 그 이후에도 혹시 모를 중복을 한 번씩 청소할 때 실행한다. 같은 키가 여러 번 있으면
@@ -12,7 +12,7 @@ import csv
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-STATUS_LOG_PATH = BASE_DIR / "data" / "status_log.csv"
+STATUS_LOG_PATH = BASE_DIR / "data" / "mokpo" / "status_log.csv"
 
 
 def main() -> None:

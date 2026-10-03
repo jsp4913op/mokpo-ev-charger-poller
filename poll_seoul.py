@@ -13,8 +13,8 @@ poll.py(목포, 5분 주기)와 거의 동일한 구조이며 다른 점만 정�
   마스터 목록이 먼저 채워져 있어야 한다.
 - DB 용량 초과 등 장애 상황을 대비한 백업으로 CSV에도 계속 그대로 남긴다(이중 저장).
   서울은 하루 약 10MB씩 쌓여 파일 하나로 두면 GitHub 파일 한도(100MiB)에 걸리므로(2026-09-24 실제 발생),
-  UTC 날짜별 파일(data/seoul_status_log_YYYY-MM-DD.csv)로 나눠 기록한다.
-  분할 이전에 쌓인 data/seoul_status_log.csv는 그대로 두고 더 이상 추가하지 않는다.
+  UTC 날짜별 파일(data/seoul/status_log_YYYY-MM-DD.csv)로 나눠 기록한다.
+  분할 이전에 쌓인 data/seoul/status_log.csv는 그대로 두고 더 이상 추가하지 않는다.
 """
 
 import csv
@@ -34,7 +34,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 
 def csv_path_for(day: date) -> Path:
-    return BASE_DIR / "data" / f"seoul_status_log_{day.isoformat()}.csv"
+    return BASE_DIR / "data" / "seoul" / f"status_log_{day.isoformat()}.csv"
 
 CSV_FIELDNAMES = [
     "fetched_at", "statId", "chgerId", "stat", "statUpdDt",

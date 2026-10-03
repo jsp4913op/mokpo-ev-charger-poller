@@ -1,5 +1,5 @@
 """
-data/mokpo_chargers.csv, data/seoul_chargers.csv(충전소·충전기 마스터 정보)를
+data/mokpo/chargers.csv, data/seoul/chargers.csv, data/jeju/chargers.csv(충전소·충전기 마스터 정보)를
 Supabase의 stations / chargers 테이블로 옮긴다(upsert).
 
 poll.py / poll_seoul.py는 이 마스터 정보가 먼저 채워져 있어야 상태 로그를 어느
@@ -59,9 +59,9 @@ def with_deadlock_retry(conn, fn, label: str):
 
 # (csv 파일, region_code) — stations.region_code에 들어갈 값. D와 이미 맞춘 값이 있다면 여기만 바꾸면 됨.
 SOURCES = [
-    (BASE_DIR / "data" / "mokpo_chargers.csv", "MOKPO"),
-    (BASE_DIR / "data" / "seoul_chargers.csv", "SEOUL"),
-    (BASE_DIR / "data" / "jeju_chargers.csv", "JEJU"),
+    (BASE_DIR / "data" / "mokpo" / "chargers.csv", "MOKPO"),
+    (BASE_DIR / "data" / "seoul" / "chargers.csv", "SEOUL"),
+    (BASE_DIR / "data" / "jeju" / "chargers.csv", "JEJU"),
 ]
 
 

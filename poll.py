@@ -1,6 +1,6 @@
 """
 목포 지역(zscode=12110) 전기차 충전기 상태를 주기적으로 수집해 Supabase(charger_status_logs)에 저장한다.
-DB 용량 초과 등 장애 상황을 대비한 백업으로 data/status_log.csv에도 계속 그대로 남긴다(이중 저장).
+DB 용량 초과 등 장애 상황을 대비한 백업으로 data/mokpo/status_log.csv에도 계속 그대로 남긴다(이중 저장).
 
 - 환경공단 EvCharger Open API의 getChargerStatus를 호출한다.
 - zscode=12110으로 서버 단에서 목포 지역만 필터링해 받아온다 (공식 활용가이드 기준).
@@ -25,7 +25,7 @@ import requests
 from db import get_connection, load_charger_id_map, map_status, parse_api_datetime
 
 BASE_DIR = Path(__file__).resolve().parent
-STATUS_LOG_PATH = BASE_DIR / "data" / "status_log.csv"
+STATUS_LOG_PATH = BASE_DIR / "data" / "mokpo" / "status_log.csv"
 
 CSV_FIELDNAMES = [
     "fetched_at", "statId", "chgerId", "stat", "statUpdDt",

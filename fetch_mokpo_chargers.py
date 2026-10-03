@@ -1,6 +1,6 @@
 """
 getChargerInfo(충전소 정보 조회)를 zscode=12110(목포시)으로 호출해
-data/mokpo_chargers.csv에 목포 지역 충전소 마스터 목록(위치 포함)을 생성한다.
+data/mokpo/chargers.csv에 목포 지역 충전소 마스터 목록(위치 포함)을 생성한다.
 
 - poll.py(getChargerStatus)와 달리 이건 정적 정보라 필요할 때(최초 1회, 또는 갱신 시)만 수동 실행한다.
 - 위도/경도까지 받아오므로, 이후 경로 추천 기능에서도 재사용 가능하다.
@@ -25,7 +25,7 @@ CONNECT_TIMEOUT_SECONDS = 10  # 정상 연결은 보통 1초 내 응답. 60초�
                               # 줄인 만큼 같은 시간 예산 안에서 재시도를 더 많이 돌린다.
 
 BASE_DIR = Path(__file__).resolve().parent
-OUTPUT_PATH = BASE_DIR / "data" / "mokpo_chargers.csv"
+OUTPUT_PATH = BASE_DIR / "data" / "mokpo" / "chargers.csv"
 
 FIELDNAMES = [
     "statId", "chgerId", "statNm", "addr", "addrDetail",

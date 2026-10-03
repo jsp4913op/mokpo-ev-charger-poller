@@ -10,7 +10,7 @@ poll_seoul.py와 거의 동일한 구조이며 다른 점만 정리하면:
 - 어느 charger_id에 연결할지는 stations/chargers 테이블에서 찾는다 —
   migrate_master_data.py로 마스터 목록이 먼저 채워져 있어야 한다.
 - DB 용량 초과 등 장애 상황을 대비한 백업으로 CSV에도 계속 그대로 남긴다(이중 저장).
-  서울과 같은 이유로 UTC 날짜별 파일(data/jeju_status_log_YYYY-MM-DD.csv)로 나눠 기록한다.
+  서울과 같은 이유로 UTC 날짜별 파일(data/jeju/status_log_YYYY-MM-DD.csv)로 나눠 기록한다.
 
 주의(B 확인 필요): data.go.kr 인증키는 목포/서울/제주 폴러가 전부 같은 키를 공유하고,
 하루 호출 한도(1,000회)도 공유된다. 이 스크립트를 실제로 몇 분 주기로 돌릴지는
@@ -34,7 +34,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 
 def csv_path_for(day: date) -> Path:
-    return BASE_DIR / "data" / f"jeju_status_log_{day.isoformat()}.csv"
+    return BASE_DIR / "data" / "jeju" / f"status_log_{day.isoformat()}.csv"
 
 CSV_FIELDNAMES = [
     "fetched_at", "statId", "chgerId", "stat", "statUpdDt",

@@ -1,6 +1,6 @@
 """
 getChargerInfo(충전소 정보 조회)를 제주시(zscode=50110)와 서귀포시(zscode=50130)로
-각각 호출해 data/jeju_chargers.csv에 제주 지역 충전소 마스터 목록(위치 포함)을 생성한다.
+각각 호출해 data/jeju/chargers.csv에 제주 지역 충전소 마스터 목록(위치 포함)을 생성한다.
 
 fetch_mokpo_chargers.py와 동일한 구조이며, 제주는 시가 두 개(제주시/서귀포시)라
 zscode를 두 번 순회해서 합친다는 점만 다르다.
@@ -28,7 +28,7 @@ CONNECT_TIMEOUT_SECONDS = 10  # 정상 연결은 보통 1초 내 응답. 60초�
                               # 줄인 만큼 같은 시간 예산 안에서 재시도를 더 많이 돌린다.
 
 BASE_DIR = Path(__file__).resolve().parent
-OUTPUT_PATH = BASE_DIR / "data" / "jeju_chargers.csv"
+OUTPUT_PATH = BASE_DIR / "data" / "jeju" / "chargers.csv"
 
 FIELDNAMES = [
     "statId", "chgerId", "statNm", "addr", "addrDetail",

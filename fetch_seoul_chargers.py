@@ -1,6 +1,6 @@
 """
 getChargerInfo(충전소 정보 조회)를 zcode=11(서울특별시)으로 호출해
-data/seoul_chargers.csv에 서울 지역 충전소 마스터 목록(위치 포함)을 생성한다.
+data/seoul/chargers.csv에 서울 지역 충전소 마스터 목록(위치 포함)을 생성한다.
 
 - fetch_mokpo_chargers.py와 동일한 방식이며, 필터만 zscode(목포 상세코드) 대신
   zcode(서울 시도코드)를 쓴다 — 서울은 특별시라 시군구 단위 상세코드 없이
@@ -41,7 +41,7 @@ def request_with_retry(url: str, params: dict) -> requests.Response:
     raise last_error
 
 BASE_DIR = Path(__file__).resolve().parent
-OUTPUT_PATH = BASE_DIR / "data" / "seoul_chargers.csv"
+OUTPUT_PATH = BASE_DIR / "data" / "seoul" / "chargers.csv"
 
 FIELDNAMES = [
     "statId", "chgerId", "statNm", "addr", "addrDetail",
